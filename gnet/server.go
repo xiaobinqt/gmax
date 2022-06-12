@@ -1,10 +1,10 @@
-package znet
+package gnet
 
 import (
 	"fmt"
 	"net"
 
-	"github.com/xiaobinqt/gmax/ziface"
+	"github.com/xiaobinqt/gmax/giface"
 )
 
 // IServer 是一个服务器接口实现
@@ -20,7 +20,7 @@ type Server struct {
 }
 
 // 初始化 Server
-func NewServer(name string) ziface.IServer {
+func NewServer(name string) giface.IServer {
 	s := &Server{
 		Name:      name,
 		IPVersion: "tcp4",
@@ -29,6 +29,18 @@ func NewServer(name string) ziface.IServer {
 	}
 
 	return s
+}
+
+func CallBackToClient(conn *net.TCPConn, data []byte, cnt int) error {
+	fmt.Println("CallBackToClient: ", string(data))
+
+	_, err := conn.Write(data)
+	if err != nil {
+		fmt.Println("CallBackToClient error: ", err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func (s *Server) Start() {
@@ -49,34 +61,24 @@ func (s *Server) Start() {
 		}
 
 		fmt.Println("Start Server Success!", s.Name, s.IPVersion, s.IP, s.Port)
+
+		var cid uint32
+		cid = 0
 		// 3. 阻塞等待客户端连接,处理客户端业务
 		for {
 			// 如果有客户端连接过来,阻塞返回
-			conn, err := listener.Accept()
+			conn, err := listener.AcceptTCP()
 			if err != nil {
 				fmt.Println("Accept error: ", err.Error())
 				continue
 			}
 
 			// 客户端已经与服务器建立连接,处理业务
-			go func() {
-				for {
-					buf := make([]byte, 512)
-					cnt, err := conn.Read(buf)
-					if err != nil {
-						fmt.Println("Read error: ", err.Error())
-						continue
-					}
+			dealConn := NewConnection(conn, cid, CallBackToClient)
+			cid++
 
-					fmt.Printf("Receive from client: %s\n", string(buf[:cnt]))
-
-					_, err = conn.Write(buf[:cnt])
-					if err != nil {
-						fmt.Println("Write error: ", err.Error())
-						continue
-					}
-				}
-			}()
+			// 启动当前连接的处理业务
+			go dealConn.Start()
 		}
 	}()
 
