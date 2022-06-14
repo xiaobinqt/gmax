@@ -20,21 +20,21 @@ type Connection struct {
 	// 当前连接的状态
 	isClosed bool
 
-	// 当前连接所绑定的处理业务的方法
-	handleAPI giface.HandleFunc
-
 	// 告知当前链接移除退出 channel
 	ExitChan chan bool
+
+	// 当前链接所绑定的router
+	Router giface.IRouter
 }
 
 // 初始化连接模块
-func NewConnection(conn *net.TCPConn, connID uint32, callbackAPI giface.HandleFunc) *Connection {
+func NewConnection(conn *net.TCPConn, connID uint32, router giface.IRouter) *Connection {
 	return &Connection{
-		Conn:      conn,
-		ConnID:    connID,
-		isClosed:  false,
-		handleAPI: callbackAPI,
-		ExitChan:  make(chan bool, 1),
+		Conn:     conn,
+		ConnID:   connID,
+		isClosed: false,
+		Router:   router,
+		ExitChan: make(chan bool, 1),
 	}
 }
 
@@ -52,18 +52,25 @@ func (c *Connection) StartRead() {
 
 	for {
 		buf := make([]byte, 512)
-		cnt, err := c.Conn.Read(buf)
+		_, err := c.Conn.Read(buf)
 		if err != nil {
 			fmt.Println("conn read error:", err)
 			continue
 		}
 
-		// 将读取到的数据交给业务处理
-		err = c.handleAPI(c.Conn, buf[:cnt], cnt)
-		if err != nil {
-			fmt.Println("conn handleAPI error:", err)
-			break
+		// 得到当前 conn 数据的 Request 请求数据
+		req := Request{
+			conn: c,
+			data: buf,
 		}
+
+		// 路由中,找到注册绑定的 conn 绑定的 router
+		go func(request giface.IRequest) {
+			c.Router.PreHandle(request)
+			c.Router.Handle(request)
+			c.Router.PostHandle(request)
+		}(&req)
+
 	}
 }
 

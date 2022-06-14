@@ -17,6 +17,8 @@ type Server struct {
 	IP string
 	// 服务器监听的端口
 	Port int
+	// 当前 server 添加一个 router,server 注册的链接对应的处理业务
+	Router giface.IRouter
 }
 
 // 初始化 Server
@@ -26,21 +28,15 @@ func NewServer(name string) giface.IServer {
 		IPVersion: "tcp4",
 		IP:        "0.0.0.0",
 		Port:      8999,
+		Router:    nil,
 	}
 
 	return s
 }
 
-func CallBackToClient(conn *net.TCPConn, data []byte, cnt int) error {
-	fmt.Println("CallBackToClient: ", string(data))
-
-	_, err := conn.Write(data)
-	if err != nil {
-		fmt.Println("CallBackToClient error: ", err.Error())
-		return err
-	}
-
-	return nil
+func (s *Server) AddRouter(router giface.IRouter) {
+	s.Router = router
+	fmt.Println("Server Add Router Success!")
 }
 
 func (s *Server) Start() {
@@ -74,7 +70,7 @@ func (s *Server) Start() {
 			}
 
 			// 客户端已经与服务器建立连接,处理业务
-			dealConn := NewConnection(conn, cid, CallBackToClient)
+			dealConn := NewConnection(conn, cid, s.Router)
 			cid++
 
 			// 启动当前连接的处理业务
